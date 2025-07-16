@@ -1,11 +1,3 @@
-test command
-
-touch -t 202301011200 old_image.jpg && touch -t 202301011200 old_document.txt && touch -t 202301011200 old_archive.zip && touch -t 202301011200 old_file.unknown && touch new_file.txt
-
-ruby organizer.rb ~/test_downloads_organizer
-
----
-
 # 📂 Folder Organizer
 
 A command-line Ruby script that automatically organizes files in a specified directory into subfolders based on their file type and age. This tool is designed to keep directories like `~/Downloads` clean and manageable with minimal effort.
