@@ -17,6 +17,7 @@ _local*
 /node_modules
 /.pnp
 .pnp.js
+/target
 
 # testing
 /coverage
