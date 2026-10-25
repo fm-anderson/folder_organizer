@@ -17,7 +17,7 @@ struct Cli {
 }
 
 fn main() -> std::io::Result<()> {
-    let cli = Cli::parse();
+    let cli: Cli = Cli::parse();
     logging::initialize_logging()?;
     tracing::info!("Organizer started");
 
@@ -37,7 +37,7 @@ fn main() -> std::io::Result<()> {
     println!("Directory: {:?}", cli.directory);
     println!("Minimum age: {} days", cli.min_age_days);
 
-    let eligible_count =
+    let eligible_count: usize =
         organizer::organize_directory(&cli.directory, cli.dry_run, cli.min_age_days)?;
 
     println!("Eligible files: {}", eligible_count);

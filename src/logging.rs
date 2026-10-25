@@ -3,14 +3,14 @@ use std::path::{Path, PathBuf};
 use tracing_subscriber::fmt::writer::MakeWriterExt;
 
 fn log_period(line: &str) -> Option<(u16, u8)> {
-    let timestamp = line.split_whitespace().next()?;
+    let timestamp: &str = line.split_whitespace().next()?;
 
     let mut parts = timestamp.split('-');
 
-    let year = parts.next()?.parse::<u16>().ok()?;
-    let month = parts.next()?.parse::<u8>().ok()?;
+    let year: u16 = parts.next()?.parse::<u16>().ok()?;
+    let month: u8 = parts.next()?.parse::<u8>().ok()?;
 
-    let half = match month {
+    let half: u8 = match month {
         1..=6 => 1,
         7..=12 => 2,
         _ => return None,
@@ -20,8 +20,8 @@ fn log_period(line: &str) -> Option<(u16, u8)> {
 }
 
 fn last_log_line(path: &Path) -> io::Result<Option<String>> {
-    let file = std::fs::File::open(path)?;
-    let reader = io::BufReader::new(file);
+    let file: std::fs::File = std::fs::File::open(path)?;
+    let reader: io::BufReader<std::fs::File> = io::BufReader::new(file);
 
     reader.lines().last().transpose()
 }
@@ -34,18 +34,18 @@ fn should_rotate_log(previous: Option<(u16, u8)>, current: (u16, u8)) -> bool {
 }
 
 fn current_log_period() -> io::Result<(u16, u8)> {
-    let now = time::OffsetDateTime::now_utc();
-    let year =
+    let now: time::OffsetDateTime = time::OffsetDateTime::now_utc();
+    let year: u16 =
         u16::try_from(now.year()).map_err(|_| io::Error::other("UTC year is out of range"))?;
-    let month = u8::from(now.month());
-    let half = if month <= 6 { 1 } else { 2 };
+    let month: u8 = u8::from(now.month());
+    let half: u8 = if month <= 6 { 1 } else { 2 };
 
     Ok((year, half))
 }
 
 fn archive_log(path: &Path, period: (u16, u8)) -> io::Result<PathBuf> {
     let (year, half) = period;
-    let archive_path = path.with_file_name(format!("organizer_{year}_{half}.log"));
+    let archive_path: PathBuf = path.with_file_name(format!("organizer_{year}_{half}.log"));
     if archive_path.try_exists()? {
         return Err(io::Error::new(
             io::ErrorKind::AlreadyExists,
@@ -58,7 +58,7 @@ fn archive_log(path: &Path, period: (u16, u8)) -> io::Result<PathBuf> {
 }
 
 fn log_directory() -> io::Result<PathBuf> {
-    let directory = std::env::var_os("ORGANIZER_LOG_DIR").ok_or_else(|| {
+    let directory: std::ffi::OsString = std::env::var_os("ORGANIZER_LOG_DIR").ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::NotFound,
             "ORGANIZER_LOG_DIR environment variable is not set",
@@ -71,23 +71,23 @@ fn log_directory() -> io::Result<PathBuf> {
 pub(crate) fn initialize_logging() -> io::Result<()> {
     dotenvy::from_path(concat!(env!("CARGO_MANIFEST_DIR"), "/.env")).map_err(io::Error::other)?;
 
-    let stable_log_dir = log_directory()?;
+    let stable_log_dir: PathBuf = log_directory()?;
 
     println!("Log directory: {}", stable_log_dir.display());
 
-    let log_path = stable_log_dir.join("organizer.log");
+    let log_path: PathBuf = stable_log_dir.join("organizer.log");
 
-    let previous_period = if log_path.try_exists()? {
-        let last_line = last_log_line(&log_path)?;
+    let previous_period: Option<(u16, u8)> = if log_path.try_exists()? {
+        let last_line: Option<String> = last_log_line(&log_path)?;
 
         last_line.as_deref().and_then(log_period)
     } else {
         None
     };
 
-    let current_period = current_log_period()?;
+    let current_period: (u16, u8) = current_log_period()?;
 
-    let rotate = should_rotate_log(previous_period, current_period);
+    let rotate: bool = should_rotate_log(previous_period, current_period);
 
     println!("Last log period: {:?}", previous_period);
     println!("Current UTC period: {:?}", current_period);
@@ -96,7 +96,7 @@ pub(crate) fn initialize_logging() -> io::Result<()> {
     if let Some(period) = previous_period
         && rotate
     {
-        let archive_path = archive_log(&log_path, period)?;
+        let archive_path: PathBuf = archive_log(&log_path, period)?;
 
         println!("Archived log: {}", archive_path.display());
     }

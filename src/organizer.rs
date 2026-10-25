@@ -16,7 +16,7 @@ fn category_for(extension: &str) -> &'static str {
 }
 
 fn numbered_filename(stem: &OsStr, extension: Option<&OsStr>, count: usize) -> OsString {
-    let mut filename = stem.to_os_string();
+    let mut filename: OsString = stem.to_os_string();
 
     filename.push(format!("_{count}"));
 
@@ -40,11 +40,11 @@ fn available_destination(destination: &Path) -> io::Result<PathBuf> {
         ));
     };
 
-    let mut count = 1;
+    let mut count: usize = 1;
 
     loop {
-        let filename = numbered_filename(stem, destination.extension(), count);
-        let candidate = destination.with_file_name(filename);
+        let filename: OsString = numbered_filename(stem, destination.extension(), count);
+        let candidate: PathBuf = destination.with_file_name(filename);
 
         if !candidate.try_exists()? {
             return Ok(candidate);
@@ -55,7 +55,7 @@ fn available_destination(destination: &Path) -> io::Result<PathBuf> {
 }
 
 fn move_file(source: &Path, destination: &Path) -> io::Result<()> {
-    let parent = destination.parent().ok_or_else(|| {
+    let parent: &Path = destination.parent().ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
             "Destination has no parent directory",
@@ -71,48 +71,44 @@ fn is_older_than_threshold(age: Duration, threshold: Duration) -> bool {
     age > threshold
 }
 
-// const AGE_THRESHOLD: Duration = Duration::from_secs(7 * 24 * 60 * 60);
-// fn is_older_than_threshold(age: Duration) -> bool {
-//     age > AGE_THRESHOLD
-// }
-
 pub(crate) fn organize_directory(
     directory: &Path,
     dry_run: bool,
     min_age_days: u64,
 ) -> io::Result<usize> {
-    let seconds = min_age_days
+    let seconds: u64 = min_age_days
         .checked_mul(SECONDS_PER_DAY)
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Minimum age is too large"))?;
 
-    let threshold = Duration::from_secs(seconds);
-    let now = SystemTime::now();
-    let mut eligible_count = 0;
+    let threshold: Duration = Duration::from_secs(seconds);
+    let now: SystemTime = SystemTime::now();
+    let mut eligible_count: usize = 0;
 
     for entry in std::fs::read_dir(directory)? {
-        let entry = entry?;
+        let entry: std::fs::DirEntry = entry?;
 
         if entry.file_name().to_string_lossy().starts_with('.') {
             continue;
         }
 
         if entry.file_type()?.is_file() {
-            let metadata = entry.metadata()?;
-            let modified = metadata.modified()?;
-            let age = now.duration_since(modified);
+            let metadata: std::fs::Metadata = entry.metadata()?;
+            let modified: SystemTime = metadata.modified()?;
+            let age: Result<Duration, std::time::SystemTimeError> = now.duration_since(modified);
 
             match age {
                 Ok(duration) => {
                     if is_older_than_threshold(duration, threshold) {
                         eligible_count += 1;
-                        let path = entry.path();
+                        let path: PathBuf = entry.path();
 
                         println!("Old file: {}", path.display());
                         println!("Age: {} days", duration.as_secs() / 86_400);
 
-                        let category = match path.extension() {
+                        let category: &str = match path.extension() {
                             Some(extension) => {
-                                let extension = extension.to_string_lossy().to_ascii_lowercase();
+                                let extension: String =
+                                    extension.to_string_lossy().to_ascii_lowercase();
 
                                 println!("Extension: {}", extension);
 
@@ -126,9 +122,9 @@ pub(crate) fn organize_directory(
                         };
 
                         println!("Category: {}", category);
-                        let destination_dir = directory.join(category);
-                        let destination_path = destination_dir.join(entry.file_name());
-                        let available_path = available_destination(&destination_path)?;
+                        let destination_dir: PathBuf = directory.join(category);
+                        let destination_path: PathBuf = destination_dir.join(entry.file_name());
+                        let available_path: PathBuf = available_destination(&destination_path)?;
 
                         if available_path != destination_path {
                             tracing::info!(
