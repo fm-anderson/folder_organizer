@@ -2,7 +2,9 @@ use clap::Parser;
 use std::ffi::{OsStr, OsString};
 use std::io;
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
+
+const AGE_THRESHOLD: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
 #[derive(Parser, Debug)]
 #[command(version, about = "Organize files by type")]
@@ -64,8 +66,26 @@ fn available_destination(destination: &Path) -> io::Result<PathBuf> {
     }
 }
 
+fn move_file(source: &Path, destination: &Path) -> io::Result<()> {
+    let parent = destination.parent().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Destination has no parent directory",
+        )
+    })?;
+
+    std::fs::create_dir_all(parent)?;
+    std::fs::rename(source, destination)
+}
+
+fn is_older_than_threshold(age: Duration) -> bool {
+    age > AGE_THRESHOLD
+}
+
 fn main() -> std::io::Result<()> {
     let cli = Cli::parse();
+    tracing_subscriber::fmt::init();
+    tracing::info!("Organizer started");
 
     if !cli.directory.is_dir() {
         eprintln!(
@@ -80,6 +100,7 @@ fn main() -> std::io::Result<()> {
     println!("Directory: {:?}", cli.directory);
 
     let now = SystemTime::now();
+    let mut eligible_count = 0;
 
     for entry in std::fs::read_dir(&cli.directory)? {
         let entry = entry?;
@@ -95,7 +116,8 @@ fn main() -> std::io::Result<()> {
 
             match age {
                 Ok(duration) => {
-                    if duration > std::time::Duration::from_secs(7 * 24 * 60 * 60) {
+                    if is_older_than_threshold(duration) {
+                        eligible_count += 1;
                         let path = entry.path();
 
                         println!("Old file: {}", path.display());
@@ -119,13 +141,21 @@ fn main() -> std::io::Result<()> {
                         println!("Category: {}", category);
                         let destination_dir = cli.directory.join(category);
                         let destination_path = destination_dir.join(entry.file_name());
-
-                        println!("Destination: {}", destination_path.display());
                         let available_path = available_destination(&destination_path)?;
 
-                        if available_path != destination_path {
-                            println!("Collision detected: {}", destination_path.display());
-                            println!("Alternative: {}", available_path.display());
+                        if cli.dry_run {
+                            tracing::info!(
+                                source = %path.display(),
+                                destination = %available_path.display(),
+                                "Would move file"
+                            );
+                        } else {
+                            move_file(&path, &available_path)?;
+                            tracing::info!(
+                                source = %path.display(),
+                                destination = %available_path.display(),
+                                "File moved"
+                            );
                         }
                     }
                 }
@@ -135,6 +165,13 @@ fn main() -> std::io::Result<()> {
             }
         }
     }
+    println!("Eligible files: {}", eligible_count);
+
+    tracing::info!(
+        eligible_files = eligible_count,
+        dry_run = cli.dry_run,
+        "Organizer finished"
+    );
 
     Ok(())
 }
@@ -223,5 +260,46 @@ mod tests {
         assert_eq!(result, expected);
 
         Ok(())
+    }
+    #[test]
+    fn test_move_file() -> std::io::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let source = temp_dir.path().join("notes.txt");
+        let destination = temp_dir.path().join("documents/notes.txt");
+        std::fs::write(&source, "Hello from Rust!")?;
+        move_file(&source, &destination)?;
+        assert!(!source.exists());
+        assert!(destination.is_file());
+        let content = std::fs::read_to_string(&destination)?;
+        assert_eq!(content, "Hello from Rust!");
+
+        Ok(())
+    }
+    #[test]
+    fn test_move_file_with_collision() -> std::io::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let source = temp_dir.path().join("report.pdf");
+        let destination_dir = temp_dir.path().join("documents");
+        let destination = destination_dir.join("report.pdf");
+        std::fs::create_dir_all(&destination_dir)?;
+        std::fs::write(&source, "New report")?;
+        std::fs::write(&destination, "Existing report")?;
+        let available_path = available_destination(&destination)?;
+        move_file(&source, &available_path)?;
+        assert_eq!(available_path, destination_dir.join("report_1.pdf"));
+        assert!(!source.exists());
+        assert_eq!(std::fs::read_to_string(&destination)?, "Existing report");
+        assert_eq!(std::fs::read_to_string(&available_path)?, "New report");
+
+        Ok(())
+    }
+    #[test]
+    fn test_seven_day_boundary() {
+        let before = AGE_THRESHOLD - Duration::from_secs(1);
+        let exact = AGE_THRESHOLD;
+        let after = AGE_THRESHOLD + Duration::from_secs(1);
+        assert!(!is_older_than_threshold(before));
+        assert!(!is_older_than_threshold(exact));
+        assert!(is_older_than_threshold(after));
     }
 }
