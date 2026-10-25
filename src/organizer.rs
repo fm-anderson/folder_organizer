@@ -66,12 +66,26 @@ fn move_file(source: &Path, destination: &Path) -> io::Result<()> {
     std::fs::rename(source, destination)
 }
 
-const AGE_THRESHOLD: Duration = Duration::from_secs(7 * 24 * 60 * 60);
-fn is_older_than_threshold(age: Duration) -> bool {
-    age > AGE_THRESHOLD
+const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
+fn is_older_than_threshold(age: Duration, threshold: Duration) -> bool {
+    age > threshold
 }
 
-pub(crate) fn organize_directory(directory: &Path, dry_run: bool) -> io::Result<usize> {
+// const AGE_THRESHOLD: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+// fn is_older_than_threshold(age: Duration) -> bool {
+//     age > AGE_THRESHOLD
+// }
+
+pub(crate) fn organize_directory(
+    directory: &Path,
+    dry_run: bool,
+    min_age_days: u64,
+) -> io::Result<usize> {
+    let seconds = min_age_days
+        .checked_mul(SECONDS_PER_DAY)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Minimum age is too large"))?;
+
+    let threshold = Duration::from_secs(seconds);
     let now = SystemTime::now();
     let mut eligible_count = 0;
 
@@ -89,7 +103,7 @@ pub(crate) fn organize_directory(directory: &Path, dry_run: bool) -> io::Result<
 
             match age {
                 Ok(duration) => {
-                    if is_older_than_threshold(duration) {
+                    if is_older_than_threshold(duration, threshold) {
                         eligible_count += 1;
                         let path = entry.path();
 
@@ -272,11 +286,12 @@ mod tests {
     }
     #[test]
     fn test_seven_day_boundary() {
-        let before = AGE_THRESHOLD - Duration::from_secs(1);
-        let exact = AGE_THRESHOLD;
-        let after = AGE_THRESHOLD + Duration::from_secs(1);
-        assert!(!is_older_than_threshold(before));
-        assert!(!is_older_than_threshold(exact));
-        assert!(is_older_than_threshold(after));
+        let threshold = Duration::from_secs(7 * SECONDS_PER_DAY);
+        let before = threshold - Duration::from_secs(1);
+        let exact = threshold;
+        let after = threshold + Duration::from_secs(1);
+        assert!(!is_older_than_threshold(before, threshold));
+        assert!(!is_older_than_threshold(exact, threshold));
+        assert!(is_older_than_threshold(after, threshold));
     }
 }

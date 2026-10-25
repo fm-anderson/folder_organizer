@@ -11,6 +11,9 @@ struct Cli {
 
     #[arg(long)]
     dry_run: bool,
+
+    #[arg(long, default_value_t = 7)]
+    min_age_days: u64,
 }
 
 fn main() -> std::io::Result<()> {
@@ -32,8 +35,10 @@ fn main() -> std::io::Result<()> {
 
     println!("Dry run: {}", cli.dry_run);
     println!("Directory: {:?}", cli.directory);
+    println!("Minimum age: {} days", cli.min_age_days);
 
-    let eligible_count = organizer::organize_directory(&cli.directory, cli.dry_run)?;
+    let eligible_count =
+        organizer::organize_directory(&cli.directory, cli.dry_run, cli.min_age_days)?;
 
     println!("Eligible files: {}", eligible_count);
 
