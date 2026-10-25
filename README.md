@@ -1,110 +1,191 @@
-# 📂 Folder Organizer
+# Folder Organizer
 
-A command-line Ruby script that automatically organizes files in a specified directory into subfolders based on their file type and age. This tool is designed to keep directories like `~/Downloads` clean and manageable with minimal effort.
+A small Rust command-line tool that keeps directories such as `~/Downloads` organized by moving older files into subfolders based on their extensions.
 
----
+By default, files must be **older than 7 days** before they are eligible. You can customize this threshold using `--min-age-days`, preview changes with `--dry-run`, and automate the organizer through `cron`.
 
-## ✨ Features
+## Features
 
-- **Automatic Categorization:** Moves files into subfolders (e.g., `images`, `documents`, `archives`) based on their extension.
-- **Configurable Rules:** Easily customize which file types go into which folders by editing a simple mapping hash.
-- **Time-Based Delay:** Ignores new files by default (e.g., files newer than 7 days) so you can easily access recent downloads.
-- **Safe Dry Run Mode:** Preview all changes with the `--dry-run` flag before any files are actually moved.
-- **Collision Handling:** Automatically renames files by appending a suffix (e.g., `file_1.txt`) if a file with the same name already exists in the destination.
+- **Automatic categorization:** Sorts files into `documents`, `images`, `video`, `archives`, `data`, or `misc`.
+- **Configurable age threshold:** Only processes files older than a specified number of days (7 days by default). Customize this using `--min-age-days`.
+- **Dry-run mode:** Shows planned moves without modifying the files being organized.
+- **Collision handling:** Adds numeric suffixes such as `report_1.pdf` rather than deliberately replacing a file with the same name.
+- **Non-recursive processing:** Examines regular files directly inside the chosen directory, skipping subdirectories and hidden dotfiles.
+- **Persistent logging:** Writes structured logs to a directory configured through `.env`, while also showing log messages in the terminal.
+- **Half-year log archives:** Preserves previous logs as `organizer_YEAR_1.log` (January–June) or `organizer_YEAR_2.log` (July–December).
 
----
+## Requirements
 
-## ✅ Requirements
+- Rust and Cargo.
+- A `.env` file in the project's root directory.
+- Filesystem access to the directory you want to organize.
 
-- A working installation of **Ruby**.
+## Installation
 
----
-
-## ⚙️ Installation
-
-1.  Save the code as `organizer.rb` in a directory of your choice.
-2.  No other installation steps or gems are required.
-
----
-
-## 🚀 Usage
-
-You run the script from your terminal, providing the path to the directory you want to organize as a command-line argument.
-
-### Basic Usage
+Clone the repository and enter its directory:
 
 ```bash
-ruby organizer.rb <path_to_directory>
+git clone https://github.com/fm-anderson/folder_organizer.git
+cd folder_organizer
 ```
 
-### Example
+Create a `.env` file in the project root containing an **absolute** path for the logs:
 
-To organize your main Downloads folder:
+```dotenv
+ORGANIZER_LOG_DIR=/absolute/path/to/folder_organizer/logs
+```
+
+Build the executable:
 
 ```bash
-ruby organizer.rb ~/Downloads
+cargo build --release
 ```
 
-### Dry Run Mode
+The binary will be available at `target/release/folder_organizer_rs`.
 
-To see a preview of what the script _would_ do without moving any files, use the `--dry-run` flag. This is highly recommended before running it on a directory for the first time.
+**Note:** The application loads `.env` from the project directory recorded at compile time, rather than searching the current working directory. Keep the project directory and its `.env` file available when running the binary, including from `cron`.
+
+## Usage
+
+Provide the directory to organize as a positional argument.
+
+**Preview changes (recommended first):**
 
 ```bash
-# Preview changes for your Downloads folder
-ruby organizer.rb --dry-run ~/Downloads
+./target/release/folder_organizer_rs "$HOME/Downloads" --dry-run
 ```
 
----
-
-## 🔧 Configuration
-
-You can easily customize the script's behavior by editing the constants at the top of the `organizer.rb` file.
-
-### File & Folder Mapping
-
-The `FOLDER_MAPPING` hash controls where each file type is moved. You can add new extensions or change the destination folders to fit your needs.
-
-```ruby
-FOLDER_MAPPING = {
-  # Add your own rules here
-  '.zip'    => 'archives',
-  '.pdf'    => 'documents',
-  '.jpg'    => 'images',
-  # ... etc.
-}
-```
-
-### Age Threshold
-
-The `AGE_THRESHOLD_SECONDS` constant defines how old a file must be before it is moved. The calculation is `days * hours * minutes * seconds`.
-
-```ruby
-# To ignore files newer than 14 days
-AGE_THRESHOLD_SECONDS = 14 * 24 * 60 * 60
-
-# To ignore files newer than 30 days
-AGE_THRESHOLD_SECONDS = 30 * 24 * 60 * 60
-```
-
----
-
-## 🤖 Automation (macOS/Linux)
-
-You can schedule this script to run automatically using `cron`.
-
-1.  Find the full path to your Ruby installation by running `which ruby`.
-2.  Open your crontab for editing by running `crontab -e`.
-3.  Add the following line, replacing the paths with your own. This example runs the script every day at 9:00 PM.
-
-<!-- end list -->
+**Organize files:**
 
 ```bash
-# Runs every day at 9 PM
-0 21 * * * cd /path/to/your/script/folder && /full/path/to/ruby organizer.rb $HOME/Downloads
+./target/release/folder_organizer_rs "$HOME/Downloads"
 ```
 
----
+**Run through Cargo during development:**
 
-## 📄 License
+```bash
+cargo run -- "$HOME/Downloads" --dry-run
+```
+
+### Configurable Age Threshold
+
+By default, the organizer only processes files older than **7 days**.
+
+Use the `--min-age-days` option to change this threshold without modifying the source code or rebuilding the binary.
+
+**Organize files older than 30 days:**
+
+```bash
+./target/release/folder_organizer_rs "$HOME/Downloads" --min-age-days 30
+```
+
+**Preview files older than 14 days:**
+
+```bash
+./target/release/folder_organizer_rs "$HOME/Downloads" --min-age-days 14 --dry-run
+```
+
+**Use the default threshold of 7 days:**
+
+```bash
+./target/release/folder_organizer_rs "$HOME/Downloads"
+```
+
+The threshold is measured using each file's last modification time. Files must be strictly older than the specified number of days to qualify.
+
+Run `./target/release/folder_organizer_rs --help` to see all available CLI options.
+
+**Run the test suite:**
+
+```bash
+cargo test
+```
+
+`--dry-run` prevents file moves and destination-directory creation, but it **does not disable logging or log archiving**.
+
+## File categories
+
+The current extension rules are defined in `category_for()` in `src/organizer.rs`:
+
+| Destination  | Extensions                                                      |
+| ------------ | --------------------------------------------------------------- |
+| `documents/` | `md`, `pdf`, `docx`, `doc`, `pptx`, `ppt`, `xlsx`, `xls`, `txt` |
+| `images/`    | `jpg`, `jpeg`, `png`, `gif`, `webp`, `tiff`, `svg`, `heic`      |
+| `video/`     | `mp4`, `mov`, `mkv`, `avi`                                      |
+| `archives/`  | `zip`, `rar`, `7z`, `tar`, `gz`                                 |
+| `data/`      | `json`, `csv`, `xml`, `yml`                                     |
+| `misc/`      | Unknown extensions and files without extensions                 |
+
+Extensions are matched case-insensitively for ASCII letters.
+
+An eligible `report.pdf` is moved to `documents/report.pdf`. If that destination is occupied, the organizer tries `report_1.pdf`, `report_2.pdf`, and so on.
+
+### Customizing File Categories
+
+File categories are defined in the `category_for()` function in `src/organizer.rs`.
+To add or modify extension mappings, edit this function and rebuild the binary using `cargo build --release`.
+Categories are currently **code-defined** and cannot be changed through `.env` or CLI arguments.
+
+## Logging and archiving
+
+The log directory comes from `ORGANIZER_LOG_DIR` in `.env`.
+
+The active log is named `organizer.log`. On startup, the organizer examines its last entry and compares that entry's year and half-year with the current **UTC** date:
+
+- **Same half-year:** Append to `organizer.log`.
+- **Different half-year:** Rename the existing log to `organizer_YEAR_1.log` or `organizer_YEAR_2.log`, then create a fresh `organizer.log`.
+- **No existing log:** Create `organizer.log` normally.
+
+For example:
+
+```text
+logs/
+├── organizer.log
+├── organizer_2026_1.log
+└── organizer_2026_2.log
+```
+
+Archives are labeled according to the period of their previous log entries. Rotation is checked **when the program starts**, not continuously at midnight. If an archive with the target filename already exists, the program returns an error rather than intentionally overwriting it.
+
+## Daily automation with cron (macOS/Linux)
+
+To schedule the organizer for **9:00 PM every day**, first ensure it is built and the configured log directory exists:
+
+```bash
+cargo build --release
+mkdir -p /absolute/path/to/folder_organizer/logs
+```
+
+Open your crontab:
+
+```bash
+crontab -e
+```
+
+Add an entry using the absolute paths on your machine:
+
+```cron
+# Organize Downloads every day at 9:00 PM
+0 21 * * * /absolute/path/to/folder_organizer/target/release/folder_organizer_rs /absolute/path/to/Downloads >> /absolute/path/to/folder_organizer/logs/cron.log 2>&1
+```
+
+The application writes structured events to `organizer.log`. The `>> .../cron.log 2>&1` portion separately captures terminal output and errors from the scheduled command.
+
+Check the schedule with `crontab -l`. To test the same command manually, run everything **after** the five cron scheduling fields in your terminal. Be aware that this performs real file moves unless you add `--dry-run` before the output redirection.
+
+On macOS, the cron service may need permission to access protected directories such as Downloads. Scheduled runs can also be missed while your Mac is asleep.
+
+**After source changes, rebuild the executable used by cron** (`cargo build --release` for the example above). If your crontab points to `target/debug/folder_organizer_rs` instead, use `cargo build` or update the crontab to the release binary.
+
+## Project structure
+
+```text
+src/
+├── main.rs       # CLI parsing and application flow
+├── organizer.rs  # Classification, age rules, file moving, and unit tests
+└── logging.rs    # Logging setup, half-year archiving, and unit tests
+```
+
+## License
 
 This project is licensed under the [MIT License](LICENSE.md).
